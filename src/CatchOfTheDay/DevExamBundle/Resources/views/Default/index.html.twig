@@ -1,0 +1,405 @@
+{% extends 'CatchOfTheDayDevExamBundle::base.html.twig' %}
+
+{% block title %}{{ parent() }} - Welcome{% endblock title %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <link rel="stylesheet" href="{{ asset('bundles/catchofthedaydevexam/css/views/Default/index.css') }}"
+{% endblock stylesheets %}
+
+{% block body %}
+    <div class="container">
+        <div class="page-header">
+            <h3>
+                <img src="{{ asset('bundles/catchofthedaydevexam/images/cotd-logo.png') }}" />
+                CatchOfTheDay Developer Exam
+            </h3>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <p>
+                    This is an incomplete TODO list application based on Symfony 3 and Bootstrap 3. The TODO list items are to be serialised to JSON and saved in
+                    <code>src/CatchOfTheDay/DevExamBundle/Resources/data/todo-list.json.</code> We have already provided the <code>TodoListManager</code> service to read and write
+                    to this file. Look for <code>// TODO</code> comments inside <code>src/CatchOfTheDay/DevExamBundle</code> to complete the application. Please add validation to
+                    the text field in the Add New Item form - do not allow blank items to be added. You're welcome to use Javascript (jQuery is also included here) for anything.
+                </p>
+                <p>
+                    Bonus points:
+                </p>
+                <ul>
+                    <li>Add pagination to the table of TODO list items below.</li>
+                    <li>Provide the ability to edit existing TODO list items and change the text.</li>
+                    <li>Use AJAX instead of POSTing/redirecting to <code>addAction()</code> or <code>markAsCompleteAction()</code>.</li>
+                    <li>Provide a second interface to view Completed items, perhaps with the ability to 'uncomplete' items.</li>
+                    <li>Surprise us!</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <h4 class="app-header">TODO List Application</h4>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div id="root"></div>
+            </div>
+        </div>
+
+    </div>
+
+
+
+
+
+{% endblock body %}
+
+{% block javascripts %}
+    {{ parent() }}
+    <script type="text/babel">
+
+        const combineStatusAndBody = res => (
+            res.json().then(json => ({ data: json, status: res.status }))
+        );
+
+        class TodoList extends React.Component {
+
+          constructor(props) {
+            super(props);
+            this.state = {
+              loading: true,
+              todoList: [],
+              showOnlyIncomplete: true,
+              currentPage: 1,
+              editTodo: null,
+            };
+            this.perPage = 5;
+            this.addTodo = this.addTodo.bind(this);
+            this.editTodo = this.editTodo.bind(this);
+            this.markCompleted = this.markCompleted.bind(this);
+            this.setupEditTodo = this.setupEditTodo.bind(this);
+            this.loadTodoList = this.loadTodoList.bind(this);
+            this.switchShowOnlyIncomplete = this.switchShowOnlyIncomplete.bind(this);
+            this.setCurrentPage = this.setCurrentPage.bind(this);
+          }
+
+          componentWillMount() {
+            this.loadTodoList();
+          }
+
+          loadTodoList() {
+            fetch('/list')
+              .then((response) => {
+                if (response.status >= 400) {
+                  throw new Error("Bad response from server");
+                }
+                return response.json();
+              })
+              .then((data) => {
+                this.setState({
+                  loading: false,
+                  todoList: data,
+                  //currentPage: 1,
+                });
+              });
+          }
+
+          addTodo(todo) {
+            this.setState({
+              todoList: this.state.todoList.concat(todo),
+            });
+          }
+
+          editTodo(updatedTodo) {
+            var todoList = this.state.todoList;
+
+            for(var i=0; i<todoList.length; i++) {
+              if(todoList[i].id === updatedTodo.id) {
+                todoList[i].text = updatedTodo.text;
+              }
+            }
+
+            this.setState({
+              todoList: todoList,
+              editTodo: null,
+            });
+          }
+
+          markCompleted(itemId) {
+            fetch(`/items/${itemId}/mark-as-complete`, {
+              method: 'POST',
+            })
+              .then(combineStatusAndBody)
+              .then((res) => {
+                if (res.status === 200) {
+                  this.loadTodoList();
+                }
+                else if (res.status === 400) {
+                }
+              });
+          }
+
+          setupEditTodo(id, text) {
+            this.setState({
+                editTodo: {
+                  id: id,
+                  text: text,
+                },
+            });
+          }
+
+          switchShowOnlyIncomplete() {
+            this.setState({
+              showOnlyIncomplete: !this.state.showOnlyIncomplete,
+              currentPage: 1,
+            });
+          }
+
+          setCurrentPage(pageNum) {
+            this.setState({
+              currentPage: pageNum,
+            });
+          }
+
+          render() {
+
+            if(this.state.loading) {
+              return (
+                <div>
+                    <h2>Loading...</h2>
+                </div>
+              );
+            }
+
+            var todoList = this.state.todoList.filter((item) => {
+              if(this.state.showOnlyIncomplete) {
+                return item.complete === false ? true : false;
+              }
+              else
+              {
+                return true;
+              }
+            });
+
+            var todoListPaginated = todoList.filter((item, index) => {
+                var itemNum = index + 1;
+                var currentPage = this.state.currentPage;
+                var perPage = this.perPage;
+                var pageMin = (currentPage * perPage - perPage + 1);
+                var pageMax = (currentPage * perPage);
+
+                return itemNum >= pageMin && itemNum <= pageMax;
+            });
+
+            var hasPrev = this.state.currentPage-1 > 0;
+            var hasNext = this.state.currentPage * this.perPage +1 < todoList.length;
+
+            var updateUi = this.state.editTodo
+                ? this.editTodo
+                : this.addTodo;
+
+            return (
+              <div>
+                  <TodoForm updateUi={updateUi} editTodo={this.state.editTodo} />
+
+                  <div className="row">
+                      <div className="col-md-12">
+                          <button className="btn btn-default" onClick={this.switchShowOnlyIncomplete}>
+                            {this.state.showOnlyIncomplete ? 'Show all' : 'Show incomplete only'}
+                          </button>
+                      </div>
+                      <div className="col-md-12">
+                        <TodoTable todoList={todoListPaginated} markCompleted={this.markCompleted} setupEditTodo={this.setupEditTodo} />
+                      </div>
+                      <div className="col-md-12">
+
+                          <nav aria-label="Page navigation">
+                              <ul className="pagination">
+                                  <li className={hasPrev ? '' : 'disabled'}>
+                                      <a onClick={hasPrev ? () => this.setCurrentPage(this.state.currentPage-1) : () => {} }>
+                                          <span aria-hidden="true">&laquo;</span>
+                                      </a>
+                                  </li>
+                                  <li className={hasNext ? '' : 'disabled'}>
+                                      <a onClick={hasNext ? () => this.setCurrentPage(this.state.currentPage+1) : () => {} }>
+                                          <span aria-hidden="true">&raquo;</span>
+                                      </a>
+                                  </li>
+                              </ul>
+                          </nav>
+
+                      </div>
+
+                  </div>
+              </div>
+            );
+          }
+
+        }
+
+        class TodoForm extends React.Component {
+
+          constructor(props) {
+            super(props);
+            this.state = {
+              text: '',
+              msg: null,
+            };
+            this.handleInputChange = this.handleInputChange.bind(this);
+            this.save = this.save.bind(this);
+          }
+
+          componentWillReceiveProps(nextProps) {
+            if(nextProps.editTodo) {
+              this.setState({
+                text: nextProps.editTodo.text,
+              })
+            }
+          }
+
+          handleInputChange(event) {
+            var text = event.target.value;
+            this.setState({
+              text: text,
+              msg: null,
+            });
+          }
+
+          save(e) {
+            e.preventDefault();
+            var text = this.state.text;
+
+            var url = this.props.editTodo
+              ? `/items/${this.props.editTodo.id}`
+              : '/add';
+
+            var method = this.props.editTodo
+              ? 'PUT'
+              : 'POST';
+
+            fetch(url, {
+              method: method,
+              headers: {
+                'Content-Type':'application/x-www-form-urlencoded',
+              },
+              body: `todo_text=${text}`
+            })
+              .then(combineStatusAndBody)
+              .then((res) => {
+                if (res.status === 200 || res.status === 201) {
+                  this.props.updateUi(res.data.todo);
+                  this.setState({
+                    text: '',
+                  });
+                }
+                else if (res.status === 400) {
+                  this.setState({
+                    msg: res.data.msg,
+                  });
+                }
+              });
+          }
+
+          render() {
+
+            var alert = this.state.msg
+                ? <div className="alert alert-danger" role="alert">
+                        {this.state.msg}
+                  </div>
+                : null;
+
+            return (
+                <div className="row">
+                    <div className="col-md-6">
+                        <div className="well">
+
+                            <form className="form-horizontal">
+                                <h5>{this.props.editTodo ? `Edit Item: ${this.props.editTodo.id}` : 'Add New Item'}</h5>
+                                <div className="form-group">
+                                    <div className="col-md-12">
+                                        <input type="text" className="form-control" id="todo-text-input" name="todo_text" placeholder="Text" onChange={this.handleInputChange} value={this.state.text} />
+                                    </div>
+                                </div>
+                                <div className="form-group">
+                                    <div className="col-md-12">
+                                        <button type="submit" className="btn btn-primary" onClick={this.save}>
+                                          {this.props.editTodo ? 'Edit' : 'Add'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+
+                    </div>
+                </div>
+                <div className="col-md-12">
+                    {alert}
+                </div>
+              </div>
+            );
+          }
+
+        }
+
+        class TodoTable extends React.Component {
+
+          render() {
+
+            var tableBody = this.props.todoList.map((item) => {
+              return (
+                <tr key={item.id}>
+                    <td>{item.id}</td>
+                    <td>{item.created}</td>
+                    <td>{item.text}</td>
+                    <td>
+                        <button className="btn btn-sm btn-success" onClick={() => {this.props.markCompleted(item.id)}}>
+                            Mark as {item.complete ? 'Incomplete' : 'Complete'}
+                        </button>
+                    </td>
+                    <td>
+                        <button className="btn btn-sm btn-success" onClick={() => {this.props.setupEditTodo(item.id, item.text)}}>
+                            Edit
+                        </button>
+                    </td>
+                </tr>
+              );
+            });
+
+            return (
+              <table className="table table-striped table-hover">
+                  <colgroup>
+                      <col style={ {width: '120px'} } />
+                      <col style={ {width: '200px'} } />
+                      <col />
+                      <col style={ {width: '135px'} } />
+                      <col style={ {width: '50px'} } />
+                  </colgroup>
+                  <thead>
+                      <tr>
+                          <th>#</th>
+                          <th>Created Timestamp</th>
+                          <th>Text</th>
+                          <th>Actions</th>
+                          <th></th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                  {tableBody}
+                  </tbody>
+              </table>
+                );
+          }
+
+        }
+
+
+      ReactDOM.render(
+        <TodoList />,
+        document.getElementById('root')
+      );
+
+    </script>
+
+{% endblock javascripts %}
